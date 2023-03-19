@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cortex Debug (OpenOCD)",
+            "cwd": "${workspaceFolder}",
+            "executable": "./build/icm20948_filter.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "servertype": "openocd",
+            "device": "STM32F401CC",
+            "configFiles": [
+                "${workspaceFolder}/openocd.cfg",
+            ],
+            "svdFile": "./STM32F401.svd",
+            "preLaunchCommands": ["make all -j4"]
+        }
+    ]
+}
