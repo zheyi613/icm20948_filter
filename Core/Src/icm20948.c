@@ -197,6 +197,14 @@ void calibrate(void)
         }
 }
 
+/**
+ * @brief initialize icm20948
+ * 
+ * @param rate (5 - 500 Hz), note: max magnetometer rate: 100 Hz
+ * @param g_fs 250/500/1000/2000 dps
+ * @param a_fs 2/4/8/16 g
+ * @return int 0: successful / 1: failed
+ */
 int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
 {
         uint8_t val;
@@ -259,8 +267,8 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         if (write_check_reg(REG_B0_FIFO_EN_2, 0x1E))
                 return 1;
 #endif
-        /* take 200 ms data and estimate remaining bias after calibration */
-        delay_ms(200);
+        /* take 100 ms data and estimate remaining bias after calibration */
+        delay_ms(20 * (val + 1));
         icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
         bias[0] -= ax;
         bias[1] -= ay;

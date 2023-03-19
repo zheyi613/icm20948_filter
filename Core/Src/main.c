@@ -176,8 +176,8 @@ int main(void)
                                      mx, my, mz,
                                      x[0], y[0], z[0]);
     // len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
-    HAL_UART_Transmit(&huart1, msg, len, 100);
-    // CDC_Transmit_FS(msg, len);
+    // HAL_UART_Transmit(&huart1, msg, len, 100);
+    CDC_Transmit_FS(msg, len);
     HAL_Delay(100);
     /* USER CODE END WHILE */
 

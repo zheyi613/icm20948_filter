@@ -18,9 +18,9 @@
  * the read data function will get multiple data from FIFO
  * and use average filter.
  * Note that the frequency of calling read data function
- * must not lower than data rate / 300.
+ * must not lower than data rate / 200.
  * 4096 bytes(buffer size) / 12(6-axis data) = 341
- * ex: data rate: 300, read freq > 1 Hz
+ * ex: data rate: 200, read freq > 1 Hz
  */
 #define ICM20948_FIFO_EN
 
