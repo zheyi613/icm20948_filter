@@ -25,6 +25,6 @@ enum ak09916_mode {
 };
 
 int ak09916_init(enum ak09916_mode mode);
-void ak09916_read_data(float *mx, float *my, float *mz);
+int ak09916_read_data(float *mx, float *my, float *mz);
 
 #endif /* AK09916_H */

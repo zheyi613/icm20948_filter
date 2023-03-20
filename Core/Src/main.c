@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -48,7 +49,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t count = 0;
+uint8_t tim_trig = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,6 +84,10 @@ void kalman(float X[2], float angle, float velocity, float P[2][2], float dt)
   P[1][0] -= K[1] * P00_tmp;
   P[1][1] -= K[1] * P01_tmp;
 }
+extern void AHRSupdate(float gx, float gy, float gz,
+                       float ax, float ay, float az,
+                       float mx, float my, float mz);
+extern void AHRS2euler(float *r, float *p, float *y);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -120,18 +126,20 @@ int main(void)
   MX_I2C1_Init();
   MX_USB_DEVICE_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   float ax=0, ay=0, az=0, gx=0, gy=0, gz=0, mx=0, my=0, mz=0;
   float g_square;
-  float roll, pitch, yaw;
+  float roll = 0, pitch = 0, yaw = 0;
   float last_roll = 0, last_yaw = 0;
   float x[2] = {0}, y[2] = {0}, z[2] = {0};
   float Px[2][2] = {{1, 0}, {0, 1}};
   float Py[2][2] = {{1, 0}, {0, 1}};
   float Pz[2][2] = {{1, 0}, {0, 1}};
-  uint8_t msg[400], len;
+  float ahrs_roll = 0, ahrs_pitch = 0, ahrs_yaw = 0;
+  uint8_t msg[400], len = 0;
   int status = 0;
-  status = icm20948_init(200, GYRO_2000_DPS, ACCEL_4G);
+  status = icm20948_init(225, GYRO_250_DPS, ACCEL_4G);
   if (status) {
     while (1) {
       HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
@@ -139,46 +147,70 @@ int main(void)
     }
   }
   HAL_Delay(30);
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  for (uint8_t i = 0; i < 200; i++) {
+    AHRSupdate(0.0, 0.0, 20.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
+  }
+  AHRS2euler(&ahrs_roll, &ahrs_pitch, &ahrs_yaw);
+  len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n",
+                 ahrs_roll, ahrs_pitch, ahrs_yaw);
+  HAL_UART_Transmit(&huart1, msg, len, 100);
+  while (1)
+    ;
   while (1)
   {
+    while (!tim_trig)
+      ;
     // icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-    icm20948_read_axis9(&ax, &ay, &az, &gx, &gy, &gz, &mx, &my, &mz);
-    
-    g_square = ax * ax + ay * ay + az * az;
-    
-    roll = atan2f(ay, az) * RAD2DEGREE;
-    pitch = -atan2f(ax, sqrtf(ay * ay + az * az)) * RAD2DEGREE;
-    yaw = -atan2f(my, mx) * RAD2DEGREE;
-    if (abs(roll - last_roll) > 150) {
-      x[0] = roll;
+    status = icm20948_read_axis9(&ax, &ay, &az, &gx, &gy, &gz, &mx, &my, &mz);
+    if (status == 0) {
+      g_square = ax * ax + ay * ay + az * az;
+      /* kalman filter */
+      // roll = atan2f(ay, az) * RAD2DEGREE;
+      // pitch = -atan2f(ax, sqrtf(ay * ay + az * az)) * RAD2DEGREE;
+      // yaw = -atan2f(my, mx) * RAD2DEGREE;
+      // if (abs(roll - last_roll) > 150) {
+      //   x[0] = roll;
+      // }
+      // if (abs(yaw - last_yaw) > 150) {
+      //   z[0] = yaw;
+      // }
+
+      // kalman(x, roll, gx, Px, 0.1);
+      // kalman(y, pitch, gy, Py, 0.1);
+      // kalman(z, yaw, gz, Pz, 0.1);
+
+      // last_roll = roll;
+      // last_yaw = yaw;
+      /* AHRS */
+      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz);
+      AHRS2euler(&ahrs_roll, &ahrs_pitch, &ahrs_yaw);
+
+      len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
+                                       "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
+                                       "mx: %.2f, my: %.2f, mz: %.2f\n\r"
+                                       "r: %.2f, p: %.2f, y: %.2f\n\r"
+                                       "ahrs: r: %.2f, p: %.2f, y: %.2f\n\r",
+                                       ax, ay, az, g_square,
+                                       gx, gy, gz,
+                                       mx, my, mz,
+                                       x[0], y[0], z[0],
+                                       ahrs_roll, ahrs_pitch, ahrs_yaw);
+      // len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
+    } else if (status == 1) {
+      len = snprintf((char *)msg, 400, "accel/gyro failed!%s", "\n\r");
+    } else if (status == 2) {
+      len = snprintf((char *)msg, 400, "mag failed!%s", "\n\r");
     }
-    if (abs(yaw - last_yaw) > 150) {
-      z[0] = yaw;
+    if (count%10 == 0) {
+      HAL_UART_Transmit(&huart1, msg, len, 100);
     }
-
-    kalman(x, roll, gx, Px, 0.1);
-    kalman(y, pitch, gy, Py, 0.1);
-    kalman(z, yaw, gz, Pz, 0.1);
-
-    last_roll = roll;
-    last_yaw = yaw;
-
-    len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
-                                     "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
-                                     "mx: %.2f, my: %.2f, mz: %.2f\n\r"
-                                     "r: %.2f, p: %.2f, y: %.2f\n\r",
-                                     ax, ay, az, g_square,
-                                     gx, gy, gz,
-                                     mx, my, mz,
-                                     x[0], y[0], z[0]);
-    // len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
-    // HAL_UART_Transmit(&huart1, msg, len, 100);
-    CDC_Transmit_FS(msg, len);
-    HAL_Delay(100);
+    tim_trig = 0;
+    // CDC_Transmit_FS(msg, len);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -232,7 +264,17 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == htim2.Instance) {
+    tim_trig = 1;
+    if (count == 50) {
+      count = 0;
+    }
+    else
+      count++;
+  }
+}
 /* USER CODE END 4 */
 
 /**

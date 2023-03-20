@@ -46,21 +46,23 @@ int ak09916_init(enum ak09916_mode mode)
         return 0;
 }
 
-void ak09916_read_data(float *mx, float *my, float *mz)
+int ak09916_read_data(float *mx, float *my, float *mz)
 {
         uint8_t data[8];
         int16_t *ptr = (int16_t *)data;
 
         read_reg_multi(AK09916_REG_ST1, data, 1);
         if (!(data[0] & 0x01)) /* check data ready */
-                return;
+                return 1;
         read_reg_multi(AK09916_REG_HXL, data, 8);
         if (data[7] & 0x08) /* check data overflow */
-                return;
+                return 1;
         *mx = (float)(*ptr++) * 0.15;
         *mx -= MAG_CX;
         *my = -(float)(*ptr++) * 0.15;
         *my -= MAG_CY;
         *mz = -(float)(*ptr++) * 0.15;
         *mz -= MAG_CZ;
+
+        return 0;
 }

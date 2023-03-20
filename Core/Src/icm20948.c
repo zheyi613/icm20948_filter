@@ -231,7 +231,7 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
 
         set_bank(2);
         /* set gyro low pass filter and full scale range */
-        gyro_unit = (float)(1 << g_fs) / 131.0;
+        gyro_unit = (float)(2 << g_fs) / 131.0;
         if (write_check_reg(REG_B2_GYRO_CONFIG_1, 0x09 | (g_fs << 1)))
                 return 1;
         val = 1125 / rate - 1; /* set gyro sampling rate */
@@ -241,7 +241,7 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         if (write_check_reg(REG_B2_ODR_ALIGN_EN, 0x01))
                 return 1;
         /* set accel low pass filter and full scale range */
-        accel_unit = (float)(1 << a_fs) / 16384.0;
+        accel_unit = (float)(2 << a_fs) / 16384.0;
         if (write_check_reg(REG_B2_ACCEL_CONFIG, 0x09 | (a_fs << 1)))
                 return 1;
         /* set accel sampling rate */
@@ -266,7 +266,6 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         /* enable accel and gyro FIFO */
         if (write_check_reg(REG_B0_FIFO_EN_2, 0x1E))
                 return 1;
-#endif
         /* take 100 ms data and estimate remaining bias after calibration */
         delay_ms(20 * (val + 1));
         icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
@@ -276,20 +275,39 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         bias[3] -= gx;
         bias[4] -= gy;
         bias[5] -= gz;
-
+#else
+        float ax_avg = 0, ay_avg = 0, az_avg = 0;
+        float gx_avg = 0, gy_avg = 0, gz_avg = 0;
+        for (uint8_t i = 0; i < 100; i++) {
+                delay_ms(val + 1);
+                icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
+                ax_avg += ax;
+                ay_avg += ay;
+                az_avg += az;
+                gx_avg += gx;
+                gy_avg += gy;
+                gz_avg += gz;
+        }
+        bias[0] -= ax_avg / 100;
+        bias[1] -= ay_avg / 100;
+        bias[2] -= az_avg / 100 - 1.0;
+        bias[3] -= gx_avg / 100;
+        bias[4] -= gy_avg / 100;
+        bias[5] -= gz_avg / 100;
+#endif
         return 0;
 }
 
 #ifdef ICM20948_FIFO_EN
-void icm20948_read_axis6(float *ax, float *ay, float *az,
-                         float *gx, float *gy, float *gz)
+int icm20948_read_axis6(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz)
 {
         uint16_t fifo_cnt;
         read_reg_multi(REG_B0_FIFO_COUNTH, (uint8_t *)&fifo_cnt, 2);
         fifo_cnt = (fifo_cnt >> 8) | (fifo_cnt << 8);
         const uint16_t packet_cnt = fifo_cnt / 12;
         if (packet_cnt < 12 || packet_cnt > 4080) /* FIFO empty / overflow */
-                return;
+                return 1;
         uint8_t raw_data[packet_cnt][12];
         uint8_t *data;
         int16_t tmp;
@@ -310,10 +328,12 @@ void icm20948_read_axis6(float *ax, float *ay, float *az,
         *gx = avg[3] / packet_cnt * gyro_unit + bias[3];
         *gy = avg[4] / packet_cnt * gyro_unit + bias[4];
         *gz = avg[5] / packet_cnt * gyro_unit + bias[5];
+
+        return 0;
 }
 #else
-void icm20948_read_axis6(float *ax, float *ay, float *az,
-                         float *gx, float *gy, float *gz)
+int icm20948_read_axis6(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz)
 {       
         uint8_t raw_data[12];
 
@@ -331,14 +351,32 @@ void icm20948_read_axis6(float *ax, float *ay, float *az,
                 * gyro_unit + bias[4];
         *gz = (float)((int16_t)(raw_data[10] << 8) | (raw_data[11]))
                 * gyro_unit + bias[5];
+        
+        return 0;
 }
 #endif
 
-void icm20948_read_axis9(float *ax, float *ay, float *az,
-                         float *gx, float *gy, float *gz,
-                         float *mx, float *my, float *mz)
+/**
+ * @brief read accel/gyro/mag data
+ * 
+ * @param ax 
+ * @param ay 
+ * @param az 
+ * @param gx 
+ * @param gy 
+ * @param gz 
+ * @param mx 
+ * @param my 
+ * @param mz 
+ * @return int 0: successful / 1: accel/gyro failed / 2: mag failed
+ */
+int icm20948_read_axis9(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz,
+                        float *mx, float *my, float *mz)
 {
-        icm20948_read_axis6(ax, ay, az, gx, gy, gz);
-
-        ak09916_read_data(mx, my, mz);
+        if (icm20948_read_axis6(ax, ay, az, gx, gy, gz))
+                return 1;
+        if (ak09916_read_data(mx, my, mz))
+                return 2;
+        return 0;
 }

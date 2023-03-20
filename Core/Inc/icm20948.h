@@ -22,7 +22,7 @@
  * 4096 bytes(buffer size) / 12(6-axis data) = 341
  * ex: data rate: 200, read freq > 1 Hz
  */
-#define ICM20948_FIFO_EN
+// #define ICM20948_FIFO_EN
 
 enum gyro_fs {
         GYRO_250_DPS,
@@ -39,9 +39,9 @@ enum accel_fs {
 };
 
 int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs);
-void icm20948_read_axis6(float *ax, float *ay, float *az,
-                         float *gx, float *gy, float *gz);
-void icm20948_read_axis9(float *ax, float *ay, float *az,
-                         float *gx, float *gy, float *gz,
-                         float *mx, float *my, float *mz);
+int icm20948_read_axis6(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz);
+int icm20948_read_axis9(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz,
+                        float *mx, float *my, float *mz);
 #endif
