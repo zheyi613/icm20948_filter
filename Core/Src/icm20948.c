@@ -231,7 +231,7 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
 
         set_bank(2);
         /* set gyro low pass filter and full scale range */
-        gyro_unit = (float)(2 << g_fs) / 131.0;
+        gyro_unit = (float)(1 << g_fs) / 131.0;
         if (write_check_reg(REG_B2_GYRO_CONFIG_1, 0x09 | (g_fs << 1)))
                 return 1;
         val = 1125 / rate - 1; /* set gyro sampling rate */
@@ -241,7 +241,7 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         if (write_check_reg(REG_B2_ODR_ALIGN_EN, 0x01))
                 return 1;
         /* set accel low pass filter and full scale range */
-        accel_unit = (float)(2 << a_fs) / 16384.0;
+        accel_unit = (float)(1 << a_fs) / 16384.0;
         if (write_check_reg(REG_B2_ACCEL_CONFIG, 0x09 | (a_fs << 1)))
                 return 1;
         /* set accel sampling rate */

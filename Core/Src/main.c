@@ -86,7 +86,8 @@ void kalman(float X[2], float angle, float velocity, float P[2][2], float dt)
 }
 extern void AHRSupdate(float gx, float gy, float gz,
                        float ax, float ay, float az,
-                       float mx, float my, float mz);
+                       float mx, float my, float mz,
+                       float dt);
 extern void AHRS2euler(float *r, float *p, float *y);
 /* USER CODE END PFP */
 
@@ -136,7 +137,6 @@ int main(void)
   float Px[2][2] = {{1, 0}, {0, 1}};
   float Py[2][2] = {{1, 0}, {0, 1}};
   float Pz[2][2] = {{1, 0}, {0, 1}};
-  float ahrs_roll = 0, ahrs_pitch = 0, ahrs_yaw = 0;
   uint8_t msg[400], len = 0;
   int status = 0;
   status = icm20948_init(225, GYRO_250_DPS, ACCEL_4G);
@@ -146,21 +146,11 @@ int main(void)
       HAL_Delay(1000);
     }
   }
-  HAL_Delay(30);
   HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  for (uint8_t i = 0; i < 200; i++) {
-    AHRSupdate(0.0, 0.0, 20.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
-  }
-  AHRS2euler(&ahrs_roll, &ahrs_pitch, &ahrs_yaw);
-  len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n",
-                 ahrs_roll, ahrs_pitch, ahrs_yaw);
-  HAL_UART_Transmit(&huart1, msg, len, 100);
-  while (1)
-    ;
   while (1)
   {
     while (!tim_trig)
@@ -187,19 +177,16 @@ int main(void)
       // last_roll = roll;
       // last_yaw = yaw;
       /* AHRS */
-      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz);
-      AHRS2euler(&ahrs_roll, &ahrs_pitch, &ahrs_yaw);
-
+      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
+      AHRS2euler(&roll, &pitch, &yaw);
       len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
                                        "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
                                        "mx: %.2f, my: %.2f, mz: %.2f\n\r"
-                                       "r: %.2f, p: %.2f, y: %.2f\n\r"
-                                       "ahrs: r: %.2f, p: %.2f, y: %.2f\n\r",
+                                       "r: %.2f, p: %.2f, y: %.2f\n\r",
                                        ax, ay, az, g_square,
                                        gx, gy, gz,
                                        mx, my, mz,
-                                       x[0], y[0], z[0],
-                                       ahrs_roll, ahrs_pitch, ahrs_yaw);
+                                       roll, pitch, yaw);
       // len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
     } else if (status == 1) {
       len = snprintf((char *)msg, 400, "accel/gyro failed!%s", "\n\r");
