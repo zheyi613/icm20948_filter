@@ -24,7 +24,7 @@ void AHRSupdate(float gx, float gy, float gz,
                 float dt)
 {
         float recip_norm;
-        float hx, hy, hz, bx, bz;
+        float hx, hy, bx, bz;
         float halfvx, halfvy, halfvz, halfwx, halfwy, halfwz;
         float halfex, halfey, halfez;
         // auxiliary variables to reduce number of repeated operations
@@ -59,8 +59,6 @@ void AHRSupdate(float gx, float gy, float gz,
                      mz * (q1q3 + q0q2));
         hy = 2.0f * (mx * (q1q2 + q0q3) + my * (0.5f - q1q1 - q3q3) +
                      mz * (q2q3 - q0q1));
-        hz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) +
-                     mz * (0.5f - q1q1 - q2q2));
         bx = sqrt((hx * hx) + (hy * hy));
         bz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) +
                      mz * (0.5f - q1q1 - q2q2));

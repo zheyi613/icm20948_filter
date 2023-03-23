@@ -205,7 +205,8 @@ void calibrate(void)
  * @param a_fs 2/4/8/16 g
  * @return int 0: successful / 1: failed
  */
-int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
+int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs,
+                  enum low_pass lp)
 {
         uint8_t val;
         float ax = 0, ay = 0, az = 0;
@@ -232,17 +233,18 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs)
         set_bank(2);
         /* set gyro low pass filter and full scale range */
         gyro_unit = (float)(1 << g_fs) / 131.0;
-        if (write_check_reg(REG_B2_GYRO_CONFIG_1, 0x09 | (g_fs << 1)))
+        val = 0x01 | (lp << 3);
+        if (write_check_reg(REG_B2_GYRO_CONFIG_1, val | (g_fs << 1)))
+                return 1;
+        /* set accel low pass filter and full scale range */
+        accel_unit = (float)(1 << a_fs) / 16384.0;
+        if (write_check_reg(REG_B2_ACCEL_CONFIG, val | (a_fs << 1)))
                 return 1;
         val = 1125 / rate - 1; /* set gyro sampling rate */
         if (write_check_reg(REG_B2_GYRO_SMPLRT_DIV, val))
                 return 1;
         /* enable odr start time alignment */
         if (write_check_reg(REG_B2_ODR_ALIGN_EN, 0x01))
-                return 1;
-        /* set accel low pass filter and full scale range */
-        accel_unit = (float)(1 << a_fs) / 16384.0;
-        if (write_check_reg(REG_B2_ACCEL_CONFIG, 0x09 | (a_fs << 1)))
                 return 1;
         /* set accel sampling rate */
         if (write_check_reg(REG_B2_ACCEL_SMPLRT_DIV_2, val))

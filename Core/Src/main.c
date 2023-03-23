@@ -177,27 +177,27 @@ int main(void)
       // last_roll = roll;
       // last_yaw = yaw;
       /* AHRS */
-      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
-      AHRS2euler(&roll, &pitch, &yaw);
-      len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
-                                       "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
-                                       "mx: %.2f, my: %.2f, mz: %.2f\n\r"
-                                       "r: %.2f, p: %.2f, y: %.2f\n\r",
-                                       ax, ay, az, g_square,
-                                       gx, gy, gz,
-                                       mx, my, mz,
-                                       roll, pitch, yaw);
-      // len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
+      // AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
+      // AHRS2euler(&roll, &pitch, &yaw);
+      // len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
+      //                                  "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
+      //                                  "mx: %.2f, my: %.2f, mz: %.2f\n\r"
+      //                                  "r: %.2f, p: %.2f, y: %.2f\n\r",
+      //                                  ax, ay, az, g_square,
+      //                                  gx, gy, gz,
+      //                                  mx, my, mz,
+      //                                  roll, pitch, yaw);
+      len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
     } else if (status == 1) {
-      len = snprintf((char *)msg, 400, "accel/gyro failed!%s", "\n\r");
+      // len = snprintf((char *)msg, 400, "accel/gyro failed!%s", "\n\r");
     } else if (status == 2) {
-      len = snprintf((char *)msg, 400, "mag failed!%s", "\n\r");
+      // len = snprintf((char *)msg, 400, "mag failed!%s", "\n\r");
     }
-    if (count%10 == 0) {
-      HAL_UART_Transmit(&huart1, msg, len, 100);
+    if (count%2 == 0) {
+      // HAL_UART_Transmit(&huart1, msg, len, 100);
+      CDC_Transmit_FS(msg, len);
     }
     tim_trig = 0;
-    // CDC_Transmit_FS(msg, len);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
