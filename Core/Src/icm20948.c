@@ -20,7 +20,6 @@
 /* static variable */
 static float accel_unit;
 static float gyro_unit;
-static float bias[6];
 
 #define REG_BANK_SEL            0x7F
 
@@ -141,11 +140,17 @@ void calibrate(void)
         uint16_t fifo_cnt;
         uint8_t packet_cnt;
         uint8_t data[12];
-        int16_t tmp;
-        int32_t tmp_bias[6] = {0};
-        int32_t accel_tmp_bias;
+        int32_t tmp;
+        int32_t bias[6] = {0};
         uint8_t mask_bit;
         uint8_t i, j;
+
+        set_bank(2);
+        /* set gyro low pass filter to 12Hz */
+        write_reg(REG_B2_GYRO_CONFIG_1, 0x29);
+        delay_ms(50); /* wait gyro start */
+
+        set_bank(0);
         /* reset FIFO */
         write_reg(REG_B0_FIFO_RST, 0x1F);
         delay_ms(10);
@@ -169,36 +174,40 @@ void calibrate(void)
                 read_reg_multi(REG_B0_FIFO_R_W, data, 12);
                 for (j = 0; j < 6; j++) {
                         tmp = (int16_t)(data[j * 2] << 8) | data[j * 2 + 1];
-                        tmp_bias[j] += (int32_t)tmp;
+                        bias[j] += tmp;
                 }
         }
         for (i = 0; i < 6; i++) {
-                tmp_bias[i] /= (int32_t)packet_cnt;
+                bias[i] /= (int32_t)packet_cnt;
         }
-        tmp_bias[2] -= 16384;
-        
+#ifdef ACCEL_CALIBRATION_BIAS
+        bias[0] = (int32_t)(ACCEL_X_BIAS * 16384.0);
+        bias[1] = (int32_t)(ACCEL_Y_BIAS * 16384.0);
+        bias[2] = (int32_t)(ACCEL_Z_BIAS * 16384.0);
+#endif
+        bias[2] -= 16384;
         set_bank(1); /* set accel bias */
-        for (i = 0; i < 3; i++) {
+        for (i = 0; i < 3; i++) { /* 3 bytes: H(15:8), L(7:1), reserve */
                 read_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
-                accel_tmp_bias = (int32_t)((int16_t)(data[0] << 8) | data[1]);
-                mask_bit = accel_tmp_bias & 0x1UL;
-                accel_tmp_bias -= tmp_bias[i] / 8; /* 2048 LSB/g */
-                data[0] = (accel_tmp_bias >> 8) & 0xFF;
-                data[1] = accel_tmp_bias & 0xFF;
+                tmp = (int16_t)(data[0] << 8) | data[1];
+                mask_bit = tmp & 0x1UL;
+                tmp -= bias[i] >> 3; /* 2048 LSB/g*/
+                data[0] = (tmp >> 8) & 0xFF;
+                data[1] = tmp & 0xFF;
                 data[1] |= mask_bit;
                 write_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
         }
         set_bank(2); /* set gyro bias */
-        for (i = 3; i < 6; i++) {
-                read_reg_multi(REG_B2_XG_OFFS_USRH + i * 2, data, 2);
-                data[0] = ((tmp_bias[i] / 4) >> 8) & 0xFF;
-                data[1] = (tmp_bias[i] / 4) & 0xFF;
+        for (i = 0; i < 3; i++) {
+                tmp = -(bias[3 + i] >> 2); /* divide by 1000/250dps = 4 */
+                data[0] = (tmp >> 8) & 0xFF;
+                data[1] = tmp & 0xFF;
                 write_reg_multi(REG_B2_XG_OFFS_USRH + i * 2, data, 2);
         }
 }
 
 /**
- * @brief initialize icm20948
+ * @brief initialize ICM20948 and AK09916
  * 
  * @param rate (5 - 500 Hz), note: max magnetometer rate: 100 Hz
  * @param g_fs 250/500/1000/2000 dps
@@ -209,8 +218,6 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs,
                   enum low_pass lp)
 {
         uint8_t val;
-        float ax = 0, ay = 0, az = 0;
-        float gx = 0, gy = 0, gz = 0;
 
         delay_ms(100);
         set_bank(0);
@@ -221,13 +228,14 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs,
         /* get who am I */
         if (read_reg(REG_B0_WHO_AM_I) != 0xEA)
                 return 1;
+#ifdef AK09916_ENABLE
         /* enable bypass i2c */
         if (write_check_reg(REG_B0_INT_PIN_CFG, 0x02))
                 return 1;
 
         if (ak09916_init(AK09916_100HZ_MODE))
                 return 1;
-
+#endif
         calibrate();
 
         set_bank(2);
@@ -268,34 +276,6 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs,
         /* enable accel and gyro FIFO */
         if (write_check_reg(REG_B0_FIFO_EN_2, 0x1E))
                 return 1;
-        /* take 100 ms data and estimate remaining bias after calibration */
-        delay_ms(20 * (val + 1));
-        icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-        bias[0] -= ax;
-        bias[1] -= ay;
-        bias[2] -= az - 1.0;
-        bias[3] -= gx;
-        bias[4] -= gy;
-        bias[5] -= gz;
-#else
-        float ax_avg = 0, ay_avg = 0, az_avg = 0;
-        float gx_avg = 0, gy_avg = 0, gz_avg = 0;
-        for (uint8_t i = 0; i < 100; i++) {
-                delay_ms(val + 1);
-                icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-                ax_avg += ax;
-                ay_avg += ay;
-                az_avg += az;
-                gx_avg += gx;
-                gy_avg += gy;
-                gz_avg += gz;
-        }
-        bias[0] -= ax_avg / 100;
-        bias[1] -= ay_avg / 100;
-        bias[2] -= az_avg / 100 - 1.0;
-        bias[3] -= gx_avg / 100;
-        bias[4] -= gy_avg / 100;
-        bias[5] -= gz_avg / 100;
 #endif
         return 0;
 }
@@ -315,7 +295,9 @@ int icm20948_read_axis6(float *ax, float *ay, float *az,
         int16_t tmp;
         float avg[6] = {0};
 
-        read_reg_multi(REG_B0_FIFO_R_W, raw_data[0], fifo_cnt - fifo_cnt % 12);
+        if (read_reg_multi(REG_B0_FIFO_R_W, raw_data[0],
+                           fifo_cnt - fifo_cnt % 12))
+                return 1;
 
         for (uint16_t i = 0; i < packet_cnt; i++) {
                 data = &raw_data[i][0];
@@ -324,12 +306,12 @@ int icm20948_read_axis6(float *ax, float *ay, float *az,
                         avg[j] += (float)tmp;
                 }
         }
-        *ax = avg[0] / packet_cnt * accel_unit + bias[0];
-        *ay = avg[1] / packet_cnt * accel_unit + bias[1];
-        *az = avg[2] / packet_cnt * accel_unit + bias[2];
-        *gx = avg[3] / packet_cnt * gyro_unit + bias[3];
-        *gy = avg[4] / packet_cnt * gyro_unit + bias[4];
-        *gz = avg[5] / packet_cnt * gyro_unit + bias[5];
+        *ax = avg[0] / packet_cnt * accel_unit;
+        *ay = avg[1] / packet_cnt * accel_unit;
+        *az = avg[2] / packet_cnt * accel_unit;
+        *gx = avg[3] / packet_cnt * gyro_unit;
+        *gy = avg[4] / packet_cnt * gyro_unit;
+        *gz = avg[5] / packet_cnt * gyro_unit;
 
         return 0;
 }
@@ -339,46 +321,36 @@ int icm20948_read_axis6(float *ax, float *ay, float *az,
 {       
         uint8_t raw_data[12];
 
-        read_reg_multi(REG_B0_ACCEL_XOUT_H, raw_data, 12);
+        if (read_reg_multi(REG_B0_ACCEL_XOUT_H, raw_data, 12))
+                return 1;
 
         *ax = (float)((int16_t)(raw_data[0] << 8) | (raw_data[1]))
-                * accel_unit + bias[0];
+                * accel_unit;
         *ay = (float)((int16_t)(raw_data[2] << 8) | (raw_data[3]))
-                * accel_unit + bias[1];
+                * accel_unit;
         *az = (float)((int16_t)(raw_data[4] << 8) | (raw_data[5]))
-                * accel_unit + bias[2];
+                * accel_unit;
         *gx = (float)((int16_t)(raw_data[6] << 8) | (raw_data[7]))
-                * gyro_unit + bias[3];
+                * gyro_unit;
         *gy = (float)((int16_t)(raw_data[8] << 8) | (raw_data[9]))
-                * gyro_unit + bias[4];
+                * gyro_unit;
         *gz = (float)((int16_t)(raw_data[10] << 8) | (raw_data[11]))
-                * gyro_unit + bias[5];
+                * gyro_unit;
         
         return 0;
 }
 #endif
-
+#ifdef AK09916_ENABLE
 /**
- * @brief read accel/gyro/mag data
+ * @brief read AK09916 data
  * 
- * @param ax 
- * @param ay 
- * @param az 
- * @param gx 
- * @param gy 
- * @param gz 
  * @param mx 
  * @param my 
  * @param mz 
- * @return int 0: successful / 1: accel/gyro failed / 2: mag failed
+ * @return int 0: successful /  1: failed (not ready)
  */
-int icm20948_read_axis9(float *ax, float *ay, float *az,
-                        float *gx, float *gy, float *gz,
-                        float *mx, float *my, float *mz)
+int icm20948_read_mag(float *mx, float *my, float *mz)
 {
-        if (icm20948_read_axis6(ax, ay, az, gx, gy, gz))
-                return 1;
-        if (ak09916_read_data(mx, my, mz))
-                return 2;
-        return 0;
+        return ak09916_read_data(mx, my, mz);
 }
+#endif

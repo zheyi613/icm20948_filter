@@ -29,6 +29,7 @@
 #include "usbd_cdc_if.h"
 #include "icm20948.h"
 #include "math.h"
+#include "ahrs.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -84,11 +85,25 @@ void kalman(float X[2], float angle, float velocity, float P[2][2], float dt)
   P[1][0] -= K[1] * P00_tmp;
   P[1][1] -= K[1] * P01_tmp;
 }
-extern void AHRSupdate(float gx, float gy, float gz,
-                       float ax, float ay, float az,
-                       float mx, float my, float mz,
-                       float dt);
-extern void AHRS2euler(float *r, float *p, float *y);
+void transform_imu_axis(float *ax, float *ay, float *az,
+                        float *gx, float *gy, float *gz)
+{
+  /*
+   * mounting y ----> attitude x (roll)
+   *          x ---->          y (pitch)
+   *         +z ---->         -z (yaw)
+   */
+  float tmp;
+
+  tmp = -(*ax);
+  *ax = -(*ay);
+  *ay = tmp;
+
+  tmp = *gx;
+  *gx = *gy;
+  *gy = tmp;
+  *gz = -(*gz);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -129,17 +144,16 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  float ax=0, ay=0, az=0, gx=0, gy=0, gz=0, mx=0, my=0, mz=0;
-  float g_square;
+  float ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, mx = 0, my = 0, mz = 0;
   float roll = 0, pitch = 0, yaw = 0;
-  float last_roll = 0, last_yaw = 0;
-  float x[2] = {0}, y[2] = {0}, z[2] = {0};
-  float Px[2][2] = {{1, 0}, {0, 1}};
-  float Py[2][2] = {{1, 0}, {0, 1}};
-  float Pz[2][2] = {{1, 0}, {0, 1}};
+  // float last_roll = 0, last_yaw = 0;
+  // float x[2] = {0}, y[2] = {0}, z[2] = {0};
+  // float Px[2][2] = {{1, 0}, {0, 1}};
+  // float Py[2][2] = {{1, 0}, {0, 1}};
+  // float Pz[2][2] = {{1, 0}, {0, 1}};
   uint8_t msg[400], len = 0;
   int status = 0;
-  status = icm20948_init(225, GYRO_250_DPS, ACCEL_4G);
+  status = icm20948_init(225, GYRO_250_DPS, ACCEL_4G, LP_BW_119HZ);
   if (status) {
     while (1) {
       HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
@@ -155,10 +169,21 @@ int main(void)
   {
     while (!tim_trig)
       ;
-    // icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-    status = icm20948_read_axis9(&ax, &ay, &az, &gx, &gy, &gz, &mx, &my, &mz);
+    status = icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
     if (status == 0) {
-      g_square = ax * ax + ay * ay + az * az;
+      transform_imu_axis(&ax, &ay, &az, &gx, &gy, &gz);
+      AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
+      AHRS2euler(&roll, &pitch, &yaw);
+      len = snprintf((char *)msg, 400, "r: %.2f, p: %.2f, y: %.2f\n\r"
+                                       "ax: %.3f, ay: %.3f, az: %.3f\n\r"
+                                       "gx: %.2f, gy: %.2f, gz: %.2f\n\r",
+                                       roll, pitch, yaw,
+                                       ax, ay, az, gx, gy, gz);
+      CDC_Transmit_FS(msg, len);
+    }
+    status = icm20948_read_mag(&mx, &my, &mz);
+    if (status == 0) {
+      // g_square = ax * ax + ay * ay + az * az;
       /* kalman filter */
       // roll = atan2f(ay, az) * RAD2DEGREE;
       // pitch = -atan2f(ax, sqrtf(ay * ay + az * az)) * RAD2DEGREE;
@@ -176,26 +201,13 @@ int main(void)
 
       // last_roll = roll;
       // last_yaw = yaw;
-      /* AHRS */
-      // AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
-      // AHRS2euler(&roll, &pitch, &yaw);
-      // len = snprintf((char *)msg, 400, "ax: %.4f, ay: %.4f, az: %.4f, g^2: %.4f\n\r"
-      //                                  "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
-      //                                  "mx: %.2f, my: %.2f, mz: %.2f\n\r"
-      //                                  "r: %.2f, p: %.2f, y: %.2f\n\r",
-      //                                  ax, ay, az, g_square,
-      //                                  gx, gy, gz,
-      //                                  mx, my, mz,
-      //                                  roll, pitch, yaw);
-      len = snprintf((char *)msg, 400, "%.2f,%.2f,%.2f\n", mx, my, mz);
-    } else if (status == 1) {
-      // len = snprintf((char *)msg, 400, "accel/gyro failed!%s", "\n\r");
-    } else if (status == 2) {
-      // len = snprintf((char *)msg, 400, "mag failed!%s", "\n\r");
+      len = snprintf((char *)msg, 400, "mx: %.2f, my: %.2f, mz: %.2f\n\r",
+                                       mx, my, mz);
+      CDC_Transmit_FS(msg, len);
     }
     if (count%2 == 0) {
       // HAL_UART_Transmit(&huart1, msg, len, 100);
-      CDC_Transmit_FS(msg, len);
+      // CDC_Transmit_FS(msg, len);
     }
     tim_trig = 0;
     /* USER CODE END WHILE */

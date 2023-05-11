@@ -13,6 +13,13 @@
 #define ICM20948_AD0    0
 #define ICM20948_ADDR   (0b1101000 | ICM20948_AD0)
 
+// #define ACCEL_CALIBRATION_BIAS
+// #define ACCEL_X_BIAS    -0.1063
+// #define ACCEL_Y_BIAS    -0.0932
+// #define ACCEL_Z_BIAS     0.1329
+
+#define AK09916_ENABLE
+
 /* 
  * When data rate is higher than read data frequency,
  * the read data function will get multiple data from FIFO
@@ -54,7 +61,8 @@ int icm20948_init(uint16_t rate, enum gyro_fs g_fs, enum accel_fs a_fs,
                   enum low_pass lp);
 int icm20948_read_axis6(float *ax, float *ay, float *az,
                         float *gx, float *gy, float *gz);
-int icm20948_read_axis9(float *ax, float *ay, float *az,
-                        float *gx, float *gy, float *gz,
-                        float *mx, float *my, float *mz);
+#ifdef AK09916_ENABLE
+int icm20948_read_mag(float *mx, float *my, float *mz);
 #endif
+
+#endif /* ICM20948_H */

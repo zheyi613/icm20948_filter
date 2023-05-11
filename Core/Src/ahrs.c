@@ -1,5 +1,11 @@
-/* Mayhony's AHRS algorithm */
+/**
+ * @file ahrs.c
+ * @author zheyi613 (zheyi880613@gmail.com)
+ * @brief Mahony's AHRS algorithm
+ * @date 2023-03-31
+ */
 
+#include "ahrs.h"
 #include "math.h"
 
 #define DOUBLE_KP    2.0F   // P gain governs rate of convergence of accel/mag
@@ -95,7 +101,56 @@ void AHRSupdate(float gx, float gy, float gz,
         q0 *= recip_norm;  
         q1 *= recip_norm;  
         q2 *= recip_norm;  
-        q3 *= recip_norm;  
+        q3 *= recip_norm;
+}
+
+void AHRSupdateIMU(float gx, float gy, float gz,
+                   float ax, float ay, float az,
+                   float dt)
+{
+        float recip_norm;
+        float halfvx, halfvy, halfvz;
+        float halfex, halfey, halfez;
+        float qa = q0, qb = q1, qc = q2;
+
+        gx *= 0.0174533f;
+        gy *= 0.0174533f;
+        gz *= 0.0174533f;
+
+        recip_norm = inv_sqrt(ax*ax + ay*ay + az*az);
+        ax *= recip_norm;
+        ay *= recip_norm;
+        az *= recip_norm;
+
+        halfvx = q1 * q3 - q0 * q2;
+        halfvy = q0 * q1 + q2 * q3;
+        halfvz = q0 * q0 - 0.5f + q3 * q3;
+
+        halfex = ay * halfvz - az * halfvy;
+        halfey = az * halfvx - ax * halfvz;
+        halfez = ax * halfvy - ay * halfvx;
+
+        ex_int += halfex * DOUBLE_KI * dt;
+        ey_int += halfey * DOUBLE_KI * dt;
+        ez_int += halfez * DOUBLE_KI * dt;
+
+        gx += DOUBLE_KP * halfex + ex_int;
+        gy += DOUBLE_KP * halfey + ey_int;
+        gz += DOUBLE_KP * halfez + ez_int;
+
+        gx *= (0.5f * dt);
+        gy *= (0.5f * dt);
+        gz *= (0.5f * dt);
+        q0 += (-qb * gx - qc * gy - q3 * gz);
+        q1 += (qa * gx + qc * gz - q3 * gy);
+        q2 += (qa * gy - qb * gz + q3 * gx);
+        q3 += (qa * gz + qb * gy - qc * gx);
+
+        recip_norm = inv_sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);  
+        q0 *= recip_norm;  
+        q1 *= recip_norm;  
+        q2 *= recip_norm;  
+        q3 *= recip_norm;
 }
 
 void AHRS2euler(float *r, float *p, float *y)
@@ -110,9 +165,17 @@ void AHRS2euler(float *r, float *p, float *y)
         float q2q3 = q2 * q3;
         float q3q3 = q3 * q3;
 
-        *r = atan2(2.0f * (q2q3 + q0q1), 2.0f * (0.5 - q1q1 - q2q2)) *
-             57.29577951F;
-        *p = asinf(2.0f * (q1q3 - q0q2)) * 57.29577951F;
-        *y = atan2(2.0f * (q1q2 + q0q3), 2.0f * (0.5 - q2q2 - q3q3)) *
-             57.29577951F;
+        *r = atan2f(2.0f * (q0q1 + q2q3), 2.0f * (0.5f - q1q1 - q2q2)) *
+             57.29577951f;
+        *p = asinf(2.0f * (q0q2 - q1q3)) * 57.29577951f;
+        *y = atan2f(2.0f * (q0q3 + q1q2), 2.0f * (0.5f - q2q2 - q3q3)) *
+             57.29577951f;
+}
+
+void AHRS2quat(float q[4])
+{
+        q[0] = q0;
+        q[1] = q1;
+        q[2] = q2;
+        q[3] = q3;
 }

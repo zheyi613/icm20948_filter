@@ -10,10 +10,10 @@
 
 #define read_reg_multi(reg, pData, size)        \
         HAL_I2C_Mem_Read(&hi2c1, AK09916_ADDR << 1, reg,       \
-                         I2C_MEMADD_SIZE_8BIT, pData, size, 10)
+                         I2C_MEMADD_SIZE_8BIT, pData, size, 1)
 #define write_reg_multi(reg, pData, size)     \
         HAL_I2C_Mem_Write(&hi2c1, AK09916_ADDR << 1, reg,      \
-                         I2C_MEMADD_SIZE_8BIT, pData, size, 10)
+                         I2C_MEMADD_SIZE_8BIT, pData, size, 1)
 #define delay_ms(t)     HAL_Delay(t)
 
 /* AK09916 registers */
@@ -65,4 +65,11 @@ int ak09916_read_data(float *mx, float *my, float *mz)
         *mz -= MAG_CZ;
 
         return 0;
+}
+
+void ak09916_set_single_mode(void)
+{
+        uint8_t val = 0x01;
+
+        write_reg_multi(AK09916_REG_CNTL2, &val, 1);
 }
