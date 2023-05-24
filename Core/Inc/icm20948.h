@@ -13,6 +13,8 @@
 #define ICM20948_AD0    0
 #define ICM20948_ADDR   (0b1101000 | ICM20948_AD0)
 
+// #define ACCEL_CALIBRATION
+
 // #define ACCEL_CALIBRATION_BIAS
 // #define ACCEL_X_BIAS    -0.1063
 // #define ACCEL_Y_BIAS    -0.0932

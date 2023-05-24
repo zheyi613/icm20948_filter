@@ -180,12 +180,13 @@ void calibrate(void)
         for (i = 0; i < 6; i++) {
                 bias[i] /= (int32_t)packet_cnt;
         }
+        bias[2] -= 16384;
 #ifdef ACCEL_CALIBRATION_BIAS
         bias[0] = (int32_t)(ACCEL_X_BIAS * 16384.0);
         bias[1] = (int32_t)(ACCEL_Y_BIAS * 16384.0);
         bias[2] = (int32_t)(ACCEL_Z_BIAS * 16384.0);
 #endif
-        bias[2] -= 16384;
+#ifdef ACCEL_CALIBRATION
         set_bank(1); /* set accel bias */
         for (i = 0; i < 3; i++) { /* 3 bytes: H(15:8), L(7:1), reserve */
                 read_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
@@ -197,6 +198,7 @@ void calibrate(void)
                 data[1] |= mask_bit;
                 write_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
         }
+#endif
         set_bank(2); /* set gyro bias */
         for (i = 0; i < 3; i++) {
                 tmp = -(bias[3 + i] >> 2); /* divide by 1000/250dps = 4 */
