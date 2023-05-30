@@ -85,25 +85,6 @@ void kalman(float X[2], float angle, float velocity, float P[2][2], float dt)
   P[1][0] -= K[1] * P00_tmp;
   P[1][1] -= K[1] * P01_tmp;
 }
-void transform_imu_axis(float *ax, float *ay, float *az,
-                        float *gx, float *gy, float *gz)
-{
-  /*
-   * mounting y ----> attitude x (roll)
-   *          x ---->          y (pitch)
-   *         +z ---->         -z (yaw)
-   */
-  float tmp;
-
-  tmp = -(*ax);
-  *ax = -(*ay);
-  *ay = tmp;
-
-  tmp = *gx;
-  *gx = *gy;
-  *gy = tmp;
-  *gz = -(*gz);
-}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -144,17 +125,12 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  float ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, mx = 0, my = 0, mz = 0;
-  float roll = 0, pitch = 0, yaw = 0;
-  // float last_roll = 0, last_yaw = 0;
-  // float x[2] = {0}, y[2] = {0}, z[2] = {0};
-  // float Px[2][2] = {{1, 0}, {0, 1}};
-  // float Py[2][2] = {{1, 0}, {0, 1}};
-  // float Pz[2][2] = {{1, 0}, {0, 1}};
-  uint8_t msg[400], len = 0;
-  int status = 0;
-  status = icm20948_init(225, GYRO_250_DPS, ACCEL_4G, LP_BW_119HZ);
-  if (status) {
+  uint8_t msg[200], len = 0;
+  float ax, ay, az, gx, gy, gz, mx, my, mz;
+  float roll, pitch, yaw;
+  int imu_status = 0;
+  int mag_status = 0;
+  if (icm20948_init(225, GYRO_250_DPS, ACCEL_4G, LP_BW_119HZ)) {
     while (1) {
       HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
       HAL_Delay(1000);
@@ -166,48 +142,35 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
+  { /* 50 Hz */
     while (!tim_trig)
       ;
-    status = icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-    if (status == 0) {
-      transform_imu_axis(&ax, &ay, &az, &gx, &gy, &gz);
-      AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
+    imu_status = icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
+
+    mag_status = icm20948_read_mag(&mx, &my, &mz);
+    // my = -my;
+    // mz = -mz;
+
+    if (imu_status == 0 && mag_status == 0) {
+      // AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
+      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
       AHRS2euler(&roll, &pitch, &yaw);
-      len = snprintf((char *)msg, 400, "r: %.2f, p: %.2f, y: %.2f\n\r"
-                                       "ax: %.3f, ay: %.3f, az: %.3f\n\r"
-                                       "gx: %.2f, gy: %.2f, gz: %.2f\n\r",
-                                       roll, pitch, yaw,
-                                       ax, ay, az, gx, gy, gz);
-      CDC_Transmit_FS(msg, len);
+    } else if (imu_status == 0) {
+      AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
     }
-    status = icm20948_read_mag(&mx, &my, &mz);
-    if (status == 0) {
-      // g_square = ax * ax + ay * ay + az * az;
-      /* kalman filter */
-      // roll = atan2f(ay, az) * RAD2DEGREE;
-      // pitch = -atan2f(ax, sqrtf(ay * ay + az * az)) * RAD2DEGREE;
-      // yaw = -atan2f(my, mx) * RAD2DEGREE;
-      // if (abs(roll - last_roll) > 150) {
-      //   x[0] = roll;
-      // }
-      // if (abs(yaw - last_yaw) > 150) {
-      //   z[0] = yaw;
-      // }
 
-      // kalman(x, roll, gx, Px, 0.1);
-      // kalman(y, pitch, gy, Py, 0.1);
-      // kalman(z, yaw, gz, Pz, 0.1);
-
-      // last_roll = roll;
-      // last_yaw = yaw;
-      len = snprintf((char *)msg, 400, "mx: %.2f, my: %.2f, mz: %.2f\n\r",
-                                       mx, my, mz);
+    if (count%5 == 0) {
+      len = snprintf((char *)msg, 200, "%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,"
+                                       "%.2f,%.2f,%.2f\n",
+                                       ax, ay, az, gx, gy, gz,
+                                       roll, pitch, yaw);
+      // len = snprintf((char *)msg, 200, "r: %.2f, p: %.2f, y: %.2f\n\r"
+      //                                  "ax: %.2f, ay: %.2f, az: %.2f\n\r"
+      //                                  "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
+      //                                  "mx: %.2f, my: %.2f, mz: %.2f\n\r",
+      //                                  roll, pitch, yaw,
+      //                                  ax, ay, az, gx, gy, gz, mx, my, mz);
       CDC_Transmit_FS(msg, len);
-    }
-    if (count%2 == 0) {
-      // HAL_UART_Transmit(&huart1, msg, len, 100);
-      // CDC_Transmit_FS(msg, len);
     }
     tim_trig = 0;
     /* USER CODE END WHILE */

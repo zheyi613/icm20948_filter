@@ -10,9 +10,9 @@
 #define AK09916_ADDR    0x0C
 
 /* calibration parameter */
-#define MAG_CX          -20.36F
-#define MAG_CY          -11.89F
-#define MAG_CZ          -43.08F
+#define MAG_CX          22.F
+#define MAG_CY          47.F
+#define MAG_CZ          6.F
 
 enum ak09916_mode {
         AK09916_POWER_DOWN_MODE,

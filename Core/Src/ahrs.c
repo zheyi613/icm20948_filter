@@ -1,14 +1,14 @@
 /**
  * @file ahrs.c
  * @author zheyi613 (zheyi880613@gmail.com)
- * @brief Mahony's AHRS algorithm
+ * @brief Mahony's complementary filter
  * @date 2023-03-31
  */
 
 #include "ahrs.h"
 #include "math.h"
 
-#define DOUBLE_KP    2.0F   // P gain governs rate of convergence of accel/mag
+#define DOUBLE_KP    1.F   // P gain governs rate of convergence of accel/mag
 #define DOUBLE_KI    0.005F // I gain governs rate of convergence of gyro biases
 
 static float q0 = 1, q1 = 0, q2 = 0, q3 = 0;
@@ -65,7 +65,7 @@ void AHRSupdate(float gx, float gy, float gz,
                      mz * (q1q3 + q0q2));
         hy = 2.0f * (mx * (q1q2 + q0q3) + my * (0.5f - q1q1 - q3q3) +
                      mz * (q2q3 - q0q1));
-        bx = sqrt((hx * hx) + (hy * hy));
+        bx = sqrt((hx * hx) + (hy * hy)); // assume by = 0
         bz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) +
                      mz * (0.5f - q1q1 - q2q2));
         // estimated direction of gravity and magnetic field (v and w)
@@ -165,11 +165,9 @@ void AHRS2euler(float *r, float *p, float *y)
         float q2q3 = q2 * q3;
         float q3q3 = q3 * q3;
 
-        *r = atan2f(2.0f * (q0q1 + q2q3), 2.0f * (0.5f - q1q1 - q2q2)) *
-             57.29577951f;
+        *r = atan2f(q0q1 + q2q3, 0.5f - q1q1 - q2q2) * 57.29577951f;
         *p = asinf(2.0f * (q0q2 - q1q3)) * 57.29577951f;
-        *y = atan2f(2.0f * (q0q3 + q1q2), 2.0f * (0.5f - q2q2 - q3q3)) *
-             57.29577951f;
+        *y = atan2f(q0q3 + q1q2, 0.5f - q2q2 - q3q3) * 57.29577951f;
 }
 
 void AHRS2quat(float q[4])
