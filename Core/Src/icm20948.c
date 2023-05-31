@@ -142,7 +142,6 @@ void calibrate(void)
         uint8_t data[12];
         int32_t tmp;
         int32_t bias[6] = {0};
-        uint8_t mask_bit;
         uint8_t i, j;
 
         set_bank(2);
@@ -187,6 +186,7 @@ void calibrate(void)
         bias[2] = (int32_t)(ACCEL_Z_BIAS * 16384.0);
 #endif
 #ifdef ACCEL_CALIBRATION
+        uint8_t mask_bit;
         set_bank(1); /* set accel bias */
         for (i = 0; i < 3; i++) { /* 3 bytes: H(15:8), L(7:1), reserve */
                 read_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
