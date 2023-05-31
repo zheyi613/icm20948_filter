@@ -144,6 +144,10 @@ int main(void)
       HAL_Delay(1000);
     }
   }
+  icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
+  icm20948_read_mag(&mx, &my, &mz);
+  ahrs_init(ax, ay, az, mx, my, mz);
+  HAL_Delay(100);
   HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
@@ -164,13 +168,13 @@ int main(void)
       enu2ned(&ax, &ay, &az);
       enu2ned(&mx, &my, &mz);
       // AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
-      AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
-      AHRS2euler(&roll, &pitch, &yaw);
+      ahrs_update(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
+      ahrs2euler(&roll, &pitch, &yaw);
       roll *= RAD2DEG;
       pitch *= RAD2DEG;
       yaw *= RAD2DEG;
     } else if (imu_status == 0) {
-      AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
+      ahrs_update_imu(gx, gy, gz, ax, ay, az, 0.02);
     }
 
     if (count%5 == 0) {

@@ -10,14 +10,16 @@
 
 #define NED_FRAME
 
-void AHRSupdate(float gx, float gy, float gz,
+void ahrs_init(float ax, float ay, float az,
+               float mx, float my, float mz);
+void ahrs_update(float gx, float gy, float gz,
                 float ax, float ay, float az,
                 float mx, float my, float mz,
                 float dt);
-void AHRSupdateIMU(float gx, float gy, float gz,
+void ahrs_update_imu(float gx, float gy, float gz,
                    float ax, float ay, float az,
                    float dt);
-void AHRS2euler(float *r, float *p, float *y);
-void AHRS2quat(float q[4]);
+void ahrs2euler(float *r, float *p, float *y);
+void ahrs2quat(float q[4]);
 
 #endif

@@ -16,12 +16,117 @@ static float ex_int = 0, ey_int = 0, ez_int = 0; // scaled integral error
 
 static float inv_sqrt(float x)
 {
-    float xhalf = 0.5f * x;
-    int i = *((int *)&x);           // get bits for floating value
-    i = 0x5f375a86 - (i >> 1);      // gives initial guess y0
-    x = *((float*)&i);              // convert bits back to float
-    x = x * (1.5f - xhalf * x * x); // Newton 1st iteration
-    return x;
+        float xhalf = 0.5f * x;
+        int i = *((int *)&x);           // get bits for floating value
+        i = 0x5f375a86 - (i >> 1);      // gives initial guess y0
+        x = *((float*)&i);              // convert bits back to float
+        x = x * (1.5f - xhalf * x * x); // Newton 1st iteration
+        return x;
+}
+
+/**
+ * @brief normalize 3d vector
+ * 
+ * @param a 
+ * @param b 
+ * @param c 
+ * @return float reciprocal norm of vector
+ */
+static float normalize_vec3(float *x, float *y, float *z)
+{
+        float recip_norm;
+
+        recip_norm = inv_sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
+        *x *= recip_norm;
+        *y *= recip_norm;
+        *z *= recip_norm;
+
+        return recip_norm;
+}
+
+static void normalize_quat(float *a, float *b, float *c, float *d)
+{
+        float recip_norm;
+
+        recip_norm = inv_sqrt((*a) * (*a) + (*b) * (*b) + (*c) * (*c) +
+                              (*d) * (*d));
+        *a *= recip_norm;
+        *b *= recip_norm;
+        *c *= recip_norm;
+        *d *= recip_norm;
+}
+
+static void cross_vec(float *a, float *b, float *c)
+{
+        c[0] = a[1] * b[2] - a[2] * b[1];
+        c[1] = a[2] * b[0] - a[0] * b[2];
+        c[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+void ahrs_init(float ax, float ay, float az,
+               float mx, float my, float mz)
+{
+        float z[3] = {0, 0, 1};
+        float bz[3];
+        float y[3];
+        float by[3];
+        float cross[3];
+        float mag[3];
+        float norm;
+        float half_angle;
+        float tmp;
+        float qz0, qz1, qz2, qz3;
+        float qy0, qy1, qy2, qy3;
+#ifdef NED_FRAME
+        ax = -ax;
+        ay = -ay;
+        az = -az;
+#endif
+        /* normalize measurement data */
+        normalize_vec3(&ax, &ay, &az);
+        bz[0] = ax;
+        bz[1] = ay;
+        bz[2] = az;
+        normalize_vec3(&mx, &my, &mz);
+        mag[0] = mx;
+        mag[1] = my;
+        mag[2] = mz;
+        /* compute angle between world z and body z */
+        cross_vec(z, bz, cross);
+        norm = 1.f / normalize_vec3(&cross[0], &cross[1], &cross[2]);
+        half_angle = asinf(norm) * 0.5f;
+        /* get first rotation */
+        qz0 = cosf(half_angle);
+        tmp = sinf(half_angle);
+        qz1 = tmp * cross[0];
+        qz2 = tmp * cross[1];
+        qz3 = tmp * cross[2];
+        /* compute vector after rotating angle about the world y */
+        y[0] = 2.f * (qz1 * qz2 - qz0 * qz3);
+        y[1] = 1.f - 2.f * (qz1 * q1 + qz3 * qz3);
+        y[2] = 2.f * (qz2 * qz3 + qz0 * qz1);
+        /* acceleration (bz) cross magnetic field to get body y */
+        cross_vec(bz, mag, by);
+        /* compute angle between y and body y */
+        cross_vec(y, by, cross);
+        norm = 1.f / normalize_vec3(&cross[0], &cross[1], &cross[2]);
+        half_angle = asinf(norm) * 0.5f;
+        qy0 = cosf(half_angle);
+        tmp = sinf(half_angle);
+        qy1 = tmp * cross[0];
+        qy2 = tmp * cross[1];
+        qy3 = tmp * cross[2];
+        /* product two quaternion */
+        q0 = qy0;
+        q1 = qy1;
+        q2 = qy2;
+        q3 = qy3;
+        // q0 = qz0 * qy0 - qz1 * qy1 - qz2 * qy2 - qz3 * qy3;
+        // q1 = qz1 * qy0 + qz0 * qy1 - qz3 * qy2 + qz2 * qy3;
+        // q2 = qz2 * qy0 + qz3 * qy1 + qz0 * qy2 - qz1 * qy3;
+        // q3 = qz3 * qy0 - qz2 * qy1 + qz1 * qy2 + qz0 * qy3;
+
+        normalize_quat(&q0, &q1, &q2, &q3);
 }
 
 /**
@@ -38,12 +143,11 @@ static float inv_sqrt(float x)
  * @param mz magnetometer z
  * @param dt time between two measurement
  */
-void AHRSupdate(float gx, float gy, float gz,
+void ahrs_update(float gx, float gy, float gz,
                 float ax, float ay, float az,
                 float mx, float my, float mz,
                 float dt)
 {
-        float recip_norm;
         float hx, hy, bx, bz;
         float halfvx, halfvy, halfvz, halfwx, halfwy, halfwz;
         float halfex, halfey, halfez;
@@ -61,14 +165,8 @@ void AHRSupdate(float gx, float gy, float gz,
         float qa = q0, qb = q1, qc = q2;
 
         // normalise the measurements
-        recip_norm = inv_sqrt(ax*ax + ay*ay + az*az);
-        ax *= recip_norm;
-        ay *= recip_norm;
-        az *= recip_norm;
-        recip_norm = inv_sqrt(mx*mx + my*my + mz*mz);
-        mx *= recip_norm;
-        my *= recip_norm;
-        mz *= recip_norm;
+        normalize_vec3(&ax, &ay, &az);
+        normalize_vec3(&mx, &my, &mz);
         // compute reference direction of magnetic field
         hx = 2.0f * (mx * (0.5f - q2q2 - q3q3) + my * (q1q2 - q0q3) +
                      mz * (q1q3 + q0q2));
@@ -111,11 +209,7 @@ void AHRSupdate(float gx, float gy, float gz,
         q2 += (qa * gy - qb * gz + q3 * gx);
         q3 += (qa * gz + qb * gy - qc * gx);
         // normalise quaternion  
-        recip_norm = inv_sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);  
-        q0 *= recip_norm;  
-        q1 *= recip_norm;  
-        q2 *= recip_norm;  
-        q3 *= recip_norm;
+        normalize_quat(&q0, &q1, &q2, &q3);
 }
 
 /**
@@ -129,19 +223,15 @@ void AHRSupdate(float gx, float gy, float gz,
  * @param az acceleration z
  * @param dt time between two measurement
  */
-void AHRSupdateIMU(float gx, float gy, float gz,
+void ahrs_update_imu(float gx, float gy, float gz,
                    float ax, float ay, float az,
                    float dt)
 {
-        float recip_norm;
         float halfvx, halfvy, halfvz;
         float halfex, halfey, halfez;
         float qa = q0, qb = q1, qc = q2;
 
-        recip_norm = inv_sqrt(ax*ax + ay*ay + az*az);
-        ax *= recip_norm;
-        ay *= recip_norm;
-        az *= recip_norm;
+        normalize_vec3(&ax, &ay, &az);
 
         halfvx = q1 * q3 - q0 * q2;
         halfvy = q0 * q1 + q2 * q3;
@@ -171,11 +261,7 @@ void AHRSupdateIMU(float gx, float gy, float gz,
         q2 += (qa * gy - qb * gz + q3 * gx);
         q3 += (qa * gz + qb * gy - qc * gx);
 
-        recip_norm = inv_sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);  
-        q0 *= recip_norm;  
-        q1 *= recip_norm;  
-        q2 *= recip_norm;  
-        q3 *= recip_norm;
+        normalize_quat(&q0, &q1, &q2, &q3);
 }
 
 /**
@@ -186,11 +272,11 @@ void AHRSupdateIMU(float gx, float gy, float gz,
  * @param p pitch (rad/s)
  * @param y yaw   (rad/s)
  */
-void AHRS2euler(float *r, float *p, float *y)
+void ahrs2euler(float *r, float *p, float *y)
 {
 #ifdef NED_FRAME
         *r = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
-        *p = asinf(2.0f * (q0 * q2 - q1 * q3));
+        *p = asinf(2.0f * (q0*q2 - q1*q3));
 #else
         *p = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
         *r = asinf(2.0f * (q0 * q2 - q1 * q3));
@@ -198,7 +284,7 @@ void AHRS2euler(float *r, float *p, float *y)
         *y = atan2f(q0 * q3 + q1 * q2, 0.5f - q2 * q2 - q3 * q3);
 }
 
-void AHRS2quat(float q[4])
+void ahrs2quat(float q[4])
 {
         q[0] = q0;
         q[1] = q1;
