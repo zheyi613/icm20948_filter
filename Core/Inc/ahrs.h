@@ -8,6 +8,8 @@
 #ifndef AHRS_H
 #define AHRS_H
 
+#define NED_FRAME
+
 void AHRSupdate(float gx, float gy, float gz,
                 float ax, float ay, float az,
                 float mx, float my, float mz,

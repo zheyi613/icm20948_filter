@@ -39,7 +39,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define RAD2DEGREE  57.29577951
+#define RAD2DEG  57.295779F
+#define DEG2RAD  0.0174533F
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -89,7 +90,14 @@ void kalman(float X[2], float angle, float velocity, float P[2][2], float dt)
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void enu2ned(float *x, float *y, float *z)
+{
+  float tmp = *x;
 
+  *x = *y;
+  *y = tmp;
+  *z = -(*z);
+}
 /* USER CODE END 0 */
 
 /**
@@ -146,15 +154,21 @@ int main(void)
     while (!tim_trig)
       ;
     imu_status = icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
-
+    gx *= DEG2RAD;
+    gy *= DEG2RAD;
+    gz *= DEG2RAD;
     mag_status = icm20948_read_mag(&mx, &my, &mz);
-    // my = -my;
-    // mz = -mz;
 
     if (imu_status == 0 && mag_status == 0) {
+      enu2ned(&gx, &gy, &gz);
+      enu2ned(&ax, &ay, &az);
+      enu2ned(&mx, &my, &mz);
       // AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
       AHRSupdate(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
       AHRS2euler(&roll, &pitch, &yaw);
+      roll *= RAD2DEG;
+      pitch *= RAD2DEG;
+      yaw *= RAD2DEG;
     } else if (imu_status == 0) {
       AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
     }

@@ -8,7 +8,7 @@
 #include "ahrs.h"
 #include "math.h"
 
-#define DOUBLE_KP    1.F   // P gain governs rate of convergence of accel/mag
+#define DOUBLE_KP    2.F   // P gain governs rate of convergence of accel/mag
 #define DOUBLE_KI    0.005F // I gain governs rate of convergence of gyro biases
 
 static float q0 = 1, q1 = 0, q2 = 0, q3 = 0;
@@ -24,6 +24,20 @@ static float inv_sqrt(float x)
     return x;
 }
 
+/**
+ * @brief Update attitute with 9-dof sensor data
+ * 
+ * @param gx gyroscope x (ras/s)
+ * @param gy gyroscope y (ras/s)
+ * @param gz gyroscope z (ras/s)
+ * @param ax acceleration x
+ * @param ay acceleration y
+ * @param az acceleration z
+ * @param mx magnetometer x
+ * @param my magnetometer y
+ * @param mz magnetometer z
+ * @param dt time between two measurement
+ */
 void AHRSupdate(float gx, float gy, float gz,
                 float ax, float ay, float az,
                 float mx, float my, float mz,
@@ -46,11 +60,6 @@ void AHRSupdate(float gx, float gy, float gz,
         float q3q3 = q3*q3;
         float qa = q0, qb = q1, qc = q2;
 
-        // Convert gyroscope deg/s to rad/s
-        gx *= 0.0174533f;
-        gy *= 0.0174533f;
-        gz *= 0.0174533f;
-
         // normalise the measurements
         recip_norm = inv_sqrt(ax*ax + ay*ay + az*az);
         ax *= recip_norm;
@@ -65,13 +74,18 @@ void AHRSupdate(float gx, float gy, float gz,
                      mz * (q1q3 + q0q2));
         hy = 2.0f * (mx * (q1q2 + q0q3) + my * (0.5f - q1q1 - q3q3) +
                      mz * (q2q3 - q0q1));
-        bx = sqrt((hx * hx) + (hy * hy)); // assume by = 0
+        bx = sqrtf((hx * hx) + (hy * hy)); // assume by = 0
         bz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) +
                      mz * (0.5f - q1q1 - q2q2));
         // estimated direction of gravity and magnetic field (v and w)
         halfvx = q1q3 - q0q2;
         halfvy = q0q1 + q2q3;
         halfvz = q0q0 - 0.5f + q3q3;
+#ifdef NED_FRAME       /* gravity: (0, 0, -1) */ 
+        halfvx = -halfvx;
+        halfvy = -halfvy;
+        halfvz = -halfvz;
+#endif
         halfwx = bx * (0.5 - q2q2 - q3q3) + bz * (q1q3 - q0q2);
         halfwy = bx * (q1q2 - q0q3) + bz * (q0q1 + q2q3);
         halfwz = bx * (q0q2 + q1q3) + bz * (0.5 - q1q1 - q2q2);
@@ -104,6 +118,17 @@ void AHRSupdate(float gx, float gy, float gz,
         q3 *= recip_norm;
 }
 
+/**
+ * @brief Update attitute with 6-dof sensor data
+ * 
+ * @param gx gyroscope x (ras/s)
+ * @param gy gyroscope y (ras/s)
+ * @param gz gyroscope z (ras/s)
+ * @param ax acceleration x
+ * @param ay acceleration y
+ * @param az acceleration z
+ * @param dt time between two measurement
+ */
 void AHRSupdateIMU(float gx, float gy, float gz,
                    float ax, float ay, float az,
                    float dt)
@@ -113,10 +138,6 @@ void AHRSupdateIMU(float gx, float gy, float gz,
         float halfex, halfey, halfez;
         float qa = q0, qb = q1, qc = q2;
 
-        gx *= 0.0174533f;
-        gy *= 0.0174533f;
-        gz *= 0.0174533f;
-
         recip_norm = inv_sqrt(ax*ax + ay*ay + az*az);
         ax *= recip_norm;
         ay *= recip_norm;
@@ -125,7 +146,11 @@ void AHRSupdateIMU(float gx, float gy, float gz,
         halfvx = q1 * q3 - q0 * q2;
         halfvy = q0 * q1 + q2 * q3;
         halfvz = q0 * q0 - 0.5f + q3 * q3;
-
+#ifdef NED_FRAME       /* gravity: (0, 0, -1) */ 
+        halfvx = -halfvx;
+        halfvy = -halfvy;
+        halfvz = -halfvz;
+#endif
         halfex = ay * halfvz - az * halfvy;
         halfey = az * halfvx - ax * halfvz;
         halfez = ax * halfvy - ay * halfvx;
@@ -153,21 +178,24 @@ void AHRSupdateIMU(float gx, float gy, float gz,
         q3 *= recip_norm;
 }
 
+/**
+ * @brief get Enler angle in rad/s
+ *        ENU frame: ZXY, NED frame: ZYX
+ * 
+ * @param r 
+ * @param p 
+ * @param y 
+ */
 void AHRS2euler(float *r, float *p, float *y)
 {
-        float q0q1 = q0 * q1;
-        float q0q2 = q0 * q2;
-        float q0q3 = q0 * q3;
-        float q1q1 = q1 * q1;
-        float q1q2 = q1 * q2;
-        float q1q3 = q1 * q3;
-        float q2q2 = q2 * q2;
-        float q2q3 = q2 * q3;
-        float q3q3 = q3 * q3;
-
-        *r = atan2f(q0q1 + q2q3, 0.5f - q1q1 - q2q2) * 57.29577951f;
-        *p = asinf(2.0f * (q0q2 - q1q3)) * 57.29577951f;
-        *y = atan2f(q0q3 + q1q2, 0.5f - q2q2 - q3q3) * 57.29577951f;
+#ifdef NED_FRAME
+        *r = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
+        *p = asinf(2.0f * (q0 * q2 - q1 * q3));
+#else
+        *p = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
+        *r = asinf(2.0f * (q0 * q2 - q1 * q3));
+#endif
+        *y = atan2f(q0 * q3 + q1 * q2, 0.5f - q2 * q2 - q3 * q3);
 }
 
 void AHRS2quat(float q[4])
