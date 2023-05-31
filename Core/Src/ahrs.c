@@ -182,9 +182,9 @@ void AHRSupdateIMU(float gx, float gy, float gz,
  * @brief get Enler angle in rad/s
  *        ENU frame: ZXY, NED frame: ZYX
  * 
- * @param r 
- * @param p 
- * @param y 
+ * @param r roll  (rad/s)
+ * @param p pitch (rad/s)
+ * @param y yaw   (rad/s)
  */
 void AHRS2euler(float *r, float *p, float *y)
 {
