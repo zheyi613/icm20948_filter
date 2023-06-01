@@ -24,27 +24,7 @@ static float inv_sqrt(float x)
         return x;
 }
 
-/**
- * @brief normalize 3d vector
- * 
- * @param a 
- * @param b 
- * @param c 
- * @return float reciprocal norm of vector
- */
-static float normalize_vec3(float *x, float *y, float *z)
-{
-        float recip_norm;
-
-        recip_norm = inv_sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
-        *x *= recip_norm;
-        *y *= recip_norm;
-        *z *= recip_norm;
-
-        return recip_norm;
-}
-
-static void normalize_quat(float *a, float *b, float *c, float *d)
+static inline void normalize_quat(float *a, float *b, float *c, float *d)
 {
         float recip_norm;
 
@@ -53,28 +33,93 @@ static void normalize_quat(float *a, float *b, float *c, float *d)
         *a *= recip_norm;
         *b *= recip_norm;
         *c *= recip_norm;
-        *d *= recip_norm;
+        *d *= recip_norm;        
 }
 
-static void cross_vec(float *a, float *b, float *c)
+static inline void normalize_vec(float *x, float *y, float *z)
 {
-        c[0] = a[1] * b[2] - a[2] * b[1];
-        c[1] = a[2] * b[0] - a[0] * b[2];
-        c[2] = a[0] * b[1] - a[1] * b[0];
+        float recip_norm;
+
+        recip_norm = inv_sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z));
+        *x *= recip_norm;
+        *y *= recip_norm;
+        *z *= recip_norm;
+}
+
+static inline void cross_vec(float ax, float ay, float az,
+                             float bx, float by, float bz,
+                             float *cx, float *cy, float *cz)
+{
+        *cx = ay * bz - az * by;
+        *cy = az * bx - ax * bz;
+        *cz = ax * by - ay * bx;
+}
+
+static inline float dot_vec(float ax, float ay, float az,
+                            float bx, float by, float bz)
+{
+        float dot;
+
+        dot = ax * bx;
+        dot += ay * by;
+        dot += az * bz;
+
+        return dot;
+}
+
+static void cross_vec2quat(float ax, float ay, float az,
+                           float bx, float by, float bz,
+                           float *qa, float *qb, float *qc, float *qd)
+{
+        float cx, cy, cz;
+        float dot, cross_norm_square, cross_norm;
+        float half_angle, sin_val;
+
+        dot = dot_vec(ax, ay, az, bx, by, bz);
+        cross_vec(ax, ay, az, bx, by, bz, &cx, &cy, &cz);
+        cross_norm_square = cx * cx + cy * cy + cz * cz;
+        if (cross_norm_square < 0.000001f && dot < 0.f) { /* angle ~ 180 deg */
+                cx = fabs(cx);
+                cy = fabs(cy);
+                cz = fabs(cz);
+                if (cx < cy && cx < cz) {
+                        *qb = 0.f;
+                        *qc = az;
+                        *qd = -ay;
+                } else if (cy < cx && cy < cz) {
+                        *qb = -az;
+                        *qc = 0.f;
+                        *qd = ax;
+                } else {
+                        *qb = ay;
+                        *qc = -ax;
+                        *qd = 0.f;
+                }
+                *qa = 0.f;
+        } else if (cross_norm_square < 0.000001f) { /* angle ~ 0 */
+                *qa = 1.f;
+                *qb = 0.f;
+                *qc = 0.f;
+                *qd = 0.f;
+        } else {
+                cross_norm = sqrtf(cross_norm_square);
+                half_angle = atan2f(cross_norm, dot) * 0.5f;
+                cx /= cross_norm;
+                cy /= cross_norm;
+                cz /= cross_norm;
+                *qa = cosf(half_angle);
+                sin_val = sinf(half_angle);
+                *qb = cx * sin_val;
+                *qc = cy * sin_val;
+                *qd = cz * sin_val;
+        }
 }
 
 void ahrs_init(float ax, float ay, float az,
                float mx, float my, float mz)
 {
-        float z[3] = {0, 0, 1};
-        float bz[3];
-        float y[3];
-        float by[3];
-        float cross[3];
-        float mag[3];
-        float norm;
-        float half_angle;
-        float tmp;
+        float wy_x, wy_y, wy_z;
+        float y_x, y_y, y_z;
         float qz0, qz1, qz2, qz3;
         float qy0, qy1, qy2, qy3;
 #ifdef NED_FRAME
@@ -83,50 +128,39 @@ void ahrs_init(float ax, float ay, float az,
         az = -az;
 #endif
         /* normalize measurement data */
-        normalize_vec3(&ax, &ay, &az);
-        bz[0] = ax;
-        bz[1] = ay;
-        bz[2] = az;
-        normalize_vec3(&mx, &my, &mz);
-        mag[0] = mx;
-        mag[1] = my;
-        mag[2] = mz;
-        /* compute angle between world z and body z */
-        cross_vec(z, bz, cross);
-        norm = 1.f / normalize_vec3(&cross[0], &cross[1], &cross[2]);
-        half_angle = asinf(norm) * 0.5f;
-        /* get first rotation */
-        qz0 = cosf(half_angle);
-        tmp = sinf(half_angle);
-        qz1 = tmp * cross[0];
-        qz2 = tmp * cross[1];
-        qz3 = tmp * cross[2];
-        /* compute vector after rotating angle about the world y */
-        y[0] = 2.f * (qz1 * qz2 - qz0 * qz3);
-        y[1] = 1.f - 2.f * (qz1 * q1 + qz3 * qz3);
-        y[2] = 2.f * (qz2 * qz3 + qz0 * qz1);
-        /* acceleration (bz) cross magnetic field to get body y */
-        cross_vec(bz, mag, by);
-        /* compute angle between y and body y */
-        cross_vec(y, by, cross);
-        norm = 1.f / normalize_vec3(&cross[0], &cross[1], &cross[2]);
-        half_angle = asinf(norm) * 0.5f;
-        qy0 = cosf(half_angle);
-        tmp = sinf(half_angle);
-        qy1 = tmp * cross[0];
-        qy2 = tmp * cross[1];
-        qy3 = tmp * cross[2];
+        normalize_vec(&ax, &ay, &az);
+        normalize_vec(&mx, &my, &mz);
+        /* get rotation of world z to body z */
+        cross_vec2quat(ax, ay, az, 0, 0, 1, &qz0, &qz1, &qz2, &qz3);
+        /* rotate world y to make world z coincide with body z */
+        y_x = 2.f * (qz1 * qz2 - qz0 * qz3);
+        y_y = 1.f - 2.f * (qz1 * qz1 + qz3 * qz3);
+        y_z = 2.f * (qz2 * qz3 + qz0 * qz1);
+        /* acceleration (wz) cross magnetic field to get world y */
+        cross_vec(ax, ay, az, mx, my, mz, &wy_x, &wy_y, &wy_z);
+        normalize_vec(&y_x, &y_y, &y_z);
+        /* compute quaternion between world y and body y */
+        cross_vec2quat(y_x, y_y, y_z, by_x, by_y, by_z,
+                       &qy0, &qy1, &qy2, &qy3);
         /* product two quaternion */
-        q0 = qy0;
-        q1 = qy1;
-        q2 = qy2;
-        q3 = qy3;
-        // q0 = qz0 * qy0 - qz1 * qy1 - qz2 * qy2 - qz3 * qy3;
-        // q1 = qz1 * qy0 + qz0 * qy1 - qz3 * qy2 + qz2 * qy3;
-        // q2 = qz2 * qy0 + qz3 * qy1 + qz0 * qy2 - qz1 * qy3;
-        // q3 = qz3 * qy0 - qz2 * qy1 + qz1 * qy2 + qz0 * qy3;
-
+        q0 = qy0 * qz0 - qy1 * qz1 - qy2 * qz2 - qy3 * qz3;
+        q1 = qy1 * qz0 + qy0 * qz1 - qy3 * qz2 + qy2 * qz3;
+        q2 = qy2 * qz0 + qy3 * qz1 + qy0 * qz2 - qy1 * qz3;
+        q3 = qy3 * qz0 - qy2 * qz1 + qy1 * qz2 + qy0 * qz3;
+        /* normalize quaternion */
         normalize_quat(&q0, &q1, &q2, &q3);
+}
+
+void ahrs_init_imu(float ax, float ay, float az)
+{
+#ifdef NED_FRAME
+        ax = -ax;
+        ay = -ay;
+        az = -az;
+#endif
+        normalize_vec(&ax, &ay, &az);
+        /* get rotation of world z to body z */
+        cross_vec2quat(ax, ay, az, 0, 0, 1, &q0, &q1, &q2, &q3);
 }
 
 /**
@@ -165,8 +199,8 @@ void ahrs_update(float gx, float gy, float gz,
         float qa = q0, qb = q1, qc = q2;
 
         // normalise the measurements
-        normalize_vec3(&ax, &ay, &az);
-        normalize_vec3(&mx, &my, &mz);
+        normalize_vec(&ax, &ay, &az);
+        normalize_vec(&mx, &my, &mz);
         // compute reference direction of magnetic field
         hx = 2.0f * (mx * (0.5f - q2q2 - q3q3) + my * (q1q2 - q0q3) +
                      mz * (q1q3 + q0q2));
@@ -208,7 +242,7 @@ void ahrs_update(float gx, float gy, float gz,
         q1 += (qa * gx + qc * gz - q3 * gy);
         q2 += (qa * gy - qb * gz + q3 * gx);
         q3 += (qa * gz + qb * gy - qc * gx);
-        // normalise quaternion  
+        // normalise quaternion
         normalize_quat(&q0, &q1, &q2, &q3);
 }
 
@@ -231,7 +265,7 @@ void ahrs_update_imu(float gx, float gy, float gz,
         float halfex, halfey, halfez;
         float qa = q0, qb = q1, qc = q2;
 
-        normalize_vec3(&ax, &ay, &az);
+        normalize_vec(&ax, &ay, &az);
 
         halfvx = q1 * q3 - q0 * q2;
         halfvy = q0 * q1 + q2 * q3;

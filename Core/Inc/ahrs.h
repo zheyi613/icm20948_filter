@@ -12,6 +12,7 @@
 
 void ahrs_init(float ax, float ay, float az,
                float mx, float my, float mz);
+void ahrs_init_imu(float ax, float ay, float az);
 void ahrs_update(float gx, float gy, float gz,
                 float ax, float ay, float az,
                 float mx, float my, float mz,

@@ -41,6 +41,8 @@
 /* USER CODE BEGIN PD */
 #define RAD2DEG  57.295779F
 #define DEG2RAD  0.0174533F
+
+#define WATCH_INITIAL_ANGLE
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -146,8 +148,22 @@ int main(void)
   }
   icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
   icm20948_read_mag(&mx, &my, &mz);
+  enu2ned(&ax, &ay, &az);
+  enu2ned(&mx, &my, &mz);
   ahrs_init(ax, ay, az, mx, my, mz);
-  HAL_Delay(100);
+  // ahrs_init_imu(ax, ay, az);
+#ifdef WATCH_INITIAL_ANGLE
+  ahrs2euler(&roll, &pitch, &yaw);
+  roll *= RAD2DEG;
+  pitch *= RAD2DEG;
+  yaw *= RAD2DEG;
+  len = snprintf((char *)msg, 200, "r: %.2f, p: %.2f, y: %.2f\n\r",
+                                      roll, pitch, yaw);
+  while (1) {
+    CDC_Transmit_FS(msg, len);
+    HAL_Delay(1000);
+  }
+#endif
   HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
@@ -178,16 +194,16 @@ int main(void)
     }
 
     if (count%5 == 0) {
-      len = snprintf((char *)msg, 200, "%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,"
-                                       "%.2f,%.2f,%.2f\n",
-                                       ax, ay, az, gx, gy, gz,
-                                       roll, pitch, yaw);
-      // len = snprintf((char *)msg, 200, "r: %.2f, p: %.2f, y: %.2f\n\r"
-      //                                  "ax: %.2f, ay: %.2f, az: %.2f\n\r"
-      //                                  "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
-      //                                  "mx: %.2f, my: %.2f, mz: %.2f\n\r",
-      //                                  roll, pitch, yaw,
-      //                                  ax, ay, az, gx, gy, gz, mx, my, mz);
+      // len = snprintf((char *)msg, 200, "%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,"
+      //                                  "%.2f,%.2f,%.2f\n",
+      //                                  ax, ay, az, gx, gy, gz,
+      //                                  roll, pitch, yaw);
+      len = snprintf((char *)msg, 200, "r: %.2f, p: %.2f, y: %.2f\n\r"
+                                       "ax: %.2f, ay: %.2f, az: %.2f\n\r"
+                                       "gx: %.2f, gy: %.2f, gz: %.2f\n\r"
+                                       "mx: %.2f, my: %.2f, mz: %.2f\n\r",
+                                       roll, pitch, yaw,
+                                       ax, ay, az, gx, gy, gz, mx, my, mz);
       CDC_Transmit_FS(msg, len);
     }
     tim_trig = 0;
