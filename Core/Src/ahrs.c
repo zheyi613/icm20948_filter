@@ -1,7 +1,7 @@
 /**
  * @file ahrs.c
  * @author zheyi613 (zheyi880613@gmail.com)
- * @brief Mahony's complementary filter
+ * @brief Mahony's complementary filter and get initial attitude
  * @date 2023-03-31
  */
 
