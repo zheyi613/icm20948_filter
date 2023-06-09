@@ -338,12 +338,13 @@ void ahrs2euler(float *r, float *p, float *y)
 {
 #ifdef NED_FRAME
         *r = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
-        *p = asinf(2.0f * (q0*q2 - q1*q3));
-#else
-        *p = atan2f(q0 * q1 + q2 * q3, 0.5f - q1 * q1 - q2 * q2);
-        *r = asinf(2.0f * (q0 * q2 - q1 * q3));
-#endif
+        *p = asinf(2.0f * (q0 * q2 - q1 * q3));
         *y = atan2f(q0 * q3 + q1 * q2, 0.5f - q2 * q2 - q3 * q3);
+#else
+        *r = atan2f(q0 * q2 - q1 * q3, 0.5f - q1 * q1 - q2 * q2);
+        *p = asinf(2.0f * (q0 * q1 + q2 * q3));
+        *y = atan2f(q0 * q3 - q1 * q2, 0.5f - q1 * q1 - q3 * q3);
+#endif
 }
 
 void ahrs2quat(float q[4])

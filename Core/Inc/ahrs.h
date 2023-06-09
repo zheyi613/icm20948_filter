@@ -8,7 +8,7 @@
 #ifndef AHRS_H
 #define AHRS_H
 
-#define NED_FRAME
+// #define NED_FRAME
 
 void ahrs_init(float ax, float ay, float az,
                float mx, float my, float mz);

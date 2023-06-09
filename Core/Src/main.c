@@ -42,7 +42,7 @@
 #define RAD2DEG  57.295779F
 #define DEG2RAD  0.0174533F
 
-#define WATCH_INITIAL_ANGLE
+// #define WATCH_INITIAL_ANGLE
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -148,8 +148,8 @@ int main(void)
   }
   icm20948_read_axis6(&ax, &ay, &az, &gx, &gy, &gz);
   icm20948_read_mag(&mx, &my, &mz);
-  enu2ned(&ax, &ay, &az);
-  enu2ned(&mx, &my, &mz);
+  // enu2ned(&ax, &ay, &az);
+  // enu2ned(&mx, &my, &mz);
   ahrs_init(ax, ay, az, mx, my, mz);
   // ahrs_init_imu(ax, ay, az);
 #ifdef WATCH_INITIAL_ANGLE
@@ -180,11 +180,11 @@ int main(void)
     mag_status = icm20948_read_mag(&mx, &my, &mz);
 
     if (imu_status == 0 && mag_status == 0) {
-      enu2ned(&gx, &gy, &gz);
-      enu2ned(&ax, &ay, &az);
-      enu2ned(&mx, &my, &mz);
-      // AHRSupdateIMU(gx, gy, gz, ax, ay, az, 0.02);
-      ahrs_update(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
+      // enu2ned(&gx, &gy, &gz);
+      // enu2ned(&ax, &ay, &az);
+      // enu2ned(&mx, &my, &mz);
+      ahrs_update_imu(gx, gy, gz, ax, ay, az, 0.02);
+      // ahrs_update(gx, gy, gz, ax, ay, az, mx, my, mz, 0.02);
       ahrs2euler(&roll, &pitch, &yaw);
       roll *= RAD2DEG;
       pitch *= RAD2DEG;
