@@ -16,9 +16,13 @@
 // #define ACCEL_CALIBRATION
 
 // #define ACCEL_CALIBRATION_BIAS
-// #define ACCEL_X_BIAS    -0.1063
-// #define ACCEL_Y_BIAS    -0.0932
-// #define ACCEL_Z_BIAS     0.1329
+// #define ACCEL_X_BIAS    -0.0075F
+// #define ACCEL_Y_BIAS    -0.019F
+// #define ACCEL_Z_BIAS    0.0065F
+// #define ACCEL_CALIBRATION_SCALE
+// #define ACCEL_X_SCALE   0.99F
+// #define ACCEL_Y_SCALE   0.9862F
+// #define ACCEL_Z_SCALE   0.9756F
 
 #define AK09916_ENABLE
 

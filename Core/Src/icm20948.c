@@ -194,8 +194,7 @@ void calibrate(void)
                 mask_bit = tmp & 0x1UL;
                 tmp -= bias[i] >> 3; /* 2048 LSB/g*/
                 data[0] = (tmp >> 8) & 0xFF;
-                data[1] = tmp & 0xFF;
-                data[1] |= mask_bit;
+                data[1] = (tmp & 0xFE) | mask_bit;
                 write_reg_multi(REG_B1_XA_OFFS_H + i * 3, data, 2);
         }
 #endif
@@ -325,13 +324,17 @@ int icm20948_read_axis6(float *ax, float *ay, float *az,
 
         if (read_reg_multi(REG_B0_ACCEL_XOUT_H, raw_data, 12))
                 return 1;
-
         *ax = (float)((int16_t)(raw_data[0] << 8) | (raw_data[1]))
                 * accel_unit;
         *ay = (float)((int16_t)(raw_data[2] << 8) | (raw_data[3]))
                 * accel_unit;
         *az = (float)((int16_t)(raw_data[4] << 8) | (raw_data[5]))
                 * accel_unit;
+#ifdef ACCEL_CALIBRATION_SCALE
+        *ax *= ACCEL_X_SCALE;
+        *ay *= ACCEL_Y_SCALE;
+        *az *= ACCEL_Z_SCALE;
+#endif
         *gx = (float)((int16_t)(raw_data[6] << 8) | (raw_data[7]))
                 * gyro_unit;
         *gy = (float)((int16_t)(raw_data[8] << 8) | (raw_data[9]))
